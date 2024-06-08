@@ -188,7 +188,10 @@ def save_function_c_code(function, output_directory):
 def decompile_function_to_c_code(function):
     decompiler = get_decompiler(function.getProgram())
     result = decompiler.decompileFunction(function, 0, TaskMonitor.DUMMY)
-    return result.getDecompiledFunction().getC()
+    try:
+        return result.getDecompiledFunction().getC()
+    except:
+        return ""
 
 # Function to get the decompiler for the current program
 def get_decompiler(program):

@@ -37,6 +37,15 @@ pip install git+https://github.com/user1342/GhidraBridge.git
 
 To utilize GhidraBridge, follow the instructions below:
 
+## Retrieve A List Of Reachable Functions Via CFG
+
+```python
+from ghidrabridge.ghidra_bridge import GhidraBridge
+
+bridge = GhidraBridge()
+print(bridge.get_list_of_reachable_functions("<path-to-binary>",<start function name>))
+```
+
 ## Decompile Binary's Functions
 ```python
 from ghidrabridge.ghidra_bridge import GhidraBridge

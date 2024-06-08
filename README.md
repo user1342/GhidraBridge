@@ -37,8 +37,21 @@ pip install git+https://github.com/user1342/GhidraBridge.git
 
 To utilize GhidraBridge, follow the instructions below:
 
-### Generate and Run Scripts
-Generate Ghidra scripts for various analysis tasks and execute them.
+## Decompile Binary's Functions
+```python
+from ghidrabridge.ghidra_bridge import GhidraBridge
+
+bridge = GhidraBridge()
+bridge.decompile_binaries_functions("<path-to-binary>", "<decom-folder>")
+```
+
+## Decompile All Binaries in Folder
+```python
+from ghidrabridge.ghidra_bridge import GhidraBridge
+
+bridge = GhidraBridge()
+bridge.decompile_all_binaries_in_folder("<path-to-folder>", "<decom-folder>")
+```
 
 ## Retrieve Decompilation For A Given Function
 
@@ -103,21 +116,7 @@ bridge = GhidraBridge()
 bridge.start_headless_with_script("<path-to-binary>", "<path-to-script>")
 ```
 
-## Decompile Binary's Functions
-```python
-from ghidrabridge.ghidra_bridge import GhidraBridge
 
-bridge = GhidraBridge()
-bridge.decompile_binaries_functions("<path-to-binary>", "<decom-folder>")
-```
-
-## Decompile All Binaries in Folder
-```python
-from ghidrabridge.ghidra_bridge import GhidraBridge
-
-bridge = GhidraBridge()
-bridge.decompile_all_binaries_in_folder("<path-to-folder>", "<decom-folder>")
-```
 
 # 🙏 Contributions
 GhidraBridge is an open-source project and welcomes contributions from the community. If you would like to contribute to GhidraBridge, please follow these guidelines:

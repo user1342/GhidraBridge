@@ -7,7 +7,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from tqdm import tqdm
-
+import re
 
 class GhidraBridge():
     def __init__(self):
@@ -19,6 +19,63 @@ class GhidraBridge():
             result = subprocess.run(command_as_list, capture_output=False, stdout=subprocess.PIPE)
             return result
 
+    def generate_control_flow_script(self, function_name):
+        script = """from ghidra.program.model.symbol import RefType, SymbolType
+from ghidra.util.task import ConsoleTaskMonitor
+from ghidra.program.model.address import Address
+from ghidra.program.model.block import BasicBlockModel, CodeBlockReferenceIterator
+from ghidra.program.model.pcode import PcodeOp
+
+def get_function_by_name(name):
+    symbol_table = currentProgram.getSymbolTable()
+    symbols = symbol_table.getSymbols(name)
+    for symbol in symbols:
+        if symbol.getSymbolType() == SymbolType.FUNCTION:
+            return getFunctionAt(symbol.getAddress())
+    return None
+
+def find_reachable_functions(function):
+    monitor = ConsoleTaskMonitor()
+    called_functions = set()
+    to_process = [function]
+
+    while to_process:
+        current_function = to_process.pop()
+        if current_function in called_functions:
+            continue
+        called_functions.add(current_function)
+        
+        # Get the instructions in the function
+        listing = currentProgram.getListing()
+        instructions = listing.getInstructions(current_function.getBody(), True)
+        
+        for instruction in instructions:
+            if instruction.getFlowType().isCall():
+                called_func = getFunctionAt(instruction.getFlows()[0])
+                if called_func and called_func not in called_functions:
+                    to_process.append(called_func)
+    
+    return called_functions
+
+def main():
+    function_name = <name>
+    function = get_function_by_name(function_name)
+    if function is None:
+        print("Function "+function_name+" not found.")
+        return
+
+    reachable_functions = find_reachable_functions(function)
+    
+    print("***")
+    for func in reachable_functions:
+        print(" "+func.getName())
+    print("***")
+if __name__ == "__main__":
+    main()
+
+""".replace("<name>",f"'{function_name}'")
+        
+        return script
 
     def generate_get_cross_references_to_function_name(self,name):
         script = """fm = currentProgram.getFunctionManager()
@@ -238,6 +295,26 @@ save_all_functions_to_files()
             script_path = Path(tmpdirname, "decom_script.py").resolve()
             self.generate_ghidra_decom_script(decom_folder, script_path)
             self._construct_ghidra_headless_command(path_to_binary, script_path, binary_hash)
+
+    def get_list_of_reachable_functions(self, path_to_binary,  function_name):
+        binary_hash = self._hash_binary(path_to_binary)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            script_path = Path(tmpdirname, "script.py").resolve()
+            script_contents  = self.generate_control_flow_script(function_name)
+
+            with open(script_path, "w") as file:
+                file.write(script_contents)
+
+            extracted_text = self._extract_text_between_delimiters(str(self._construct_ghidra_headless_command(path_to_binary, script_path, binary_hash)))
+            list_of_functions = extracted_text[0].replace("\\n", "").strip("\\").strip(function_name).strip().split(" ")
+            return list_of_functions
+
+    def _extract_text_between_delimiters(self, text):
+        # Define the regular expression pattern to match text between ***
+        pattern = r'\*\*\*(.*?)\*\*\*'
+        # Use re.findall to find all matches in the text
+        matches = re.findall(pattern, text, re.DOTALL)
+        return matches
 
     def decompile_all_binaries_in_folder(self, path_to_folder, decom_folder):
         # Create a list to store all the file paths

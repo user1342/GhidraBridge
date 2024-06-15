@@ -5,19 +5,65 @@ import subprocess
 import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-
+import os
 from tqdm import tqdm
 import re
 
 class GhidraBridge():
-    def __init__(self):
-        pass
+    def __init__(self, ghidra_project_dir=None):
+        self.ghidra_project_dir = ghidra_project_dir
 
     def _execute_blocking_command(self, command_as_list):
         if command_as_list != None:
             #print("Executing command: {}".format(command_as_list))
-            result = subprocess.run(command_as_list, capture_output=False, stdout=subprocess.PIPE)
+            result = subprocess.run(command_as_list, capture_output=False, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             return result
+
+    def generate_function_rename_script(seld, old_function_name, new_function_name):
+        script = """# Import the necessary Ghidra modules
+from ghidra.program.model.listing import FunctionManager
+from ghidra.util.exception import DuplicateNameException
+from ghidra.util.exception import InvalidInputException
+from ghidra.program.model.symbol import RefType, SymbolType
+
+# Get the current program
+program = getCurrentProgram()
+
+# Get the function manager for the current program
+function_manager = program.getFunctionManager()
+
+def get_function_by_name(name):
+    symbol_table = currentProgram.getSymbolTable()
+    symbols = symbol_table.getSymbols(name)
+    for symbol in symbols:
+        if symbol.getSymbolType() == SymbolType.FUNCTION:
+            return getFunctionAt(symbol.getAddress())
+    return None
+SymbolType
+def rename_function(function, new_name):
+    try:
+
+
+        # Rename the function
+        function.setName(new_name, ghidra.program.model.symbol.SourceType.USER_DEFINED)
+    except DuplicateNameException as e:
+        print("Error: Duplicate function name - {}".format(e))
+    except InvalidInputException as e:
+        print("Error: Invalid input - {}".format(e))
+    except Exception as e:
+        print("An unexpected error occurred: {}".format(e))
+
+# Example usage:
+# Specify the address of the function you want to rename
+function_address = get_function_by_name("<old_name>")  # Change this to the address of your function
+new_function_name = "<new_name>"  # Change this to the new name you want to assign
+
+# Rename the function
+rename_function(function_address, new_function_name)""".replace("<old_name>",f"{old_function_name}").replace("<new_name>",f"{new_function_name}")
+        
+
+        return script
+
 
     def generate_control_flow_script(self, function_name):
         script = """from ghidra.program.model.symbol import RefType, SymbolType
@@ -188,7 +234,10 @@ def save_function_c_code(function, output_directory):
 def decompile_function_to_c_code(function):
     decompiler = get_decompiler(function.getProgram())
     result = decompiler.decompileFunction(function, 0, TaskMonitor.DUMMY)
-    return result.getDecompiledFunction().getC()
+    try:
+        return result.getDecompiledFunction().getC()
+    except:
+        return ""
 
 # Function to get the decompiler for the current program
 def get_decompiler(program):
@@ -231,8 +280,7 @@ save_all_functions_to_files()
             script_path = Path(tmpdirname, "decom_script.py").resolve()
             self._construct_ghidra_headless_command(path_to_binary, path_to_script, binary_hash)
 
-    def _construct_ghidra_headless_command(self, binary_path, script_path, binary_hash,
-                                           ghidra_project_dir=Path.cwd().name):
+    def _construct_ghidra_headless_command(self, binary_path, script_path, binary_hash):
 
         binary_name = "analyzeHeadless.bat"
 
@@ -245,20 +293,48 @@ save_all_functions_to_files()
         if headless is not None:
             pass#print(f"{binary_name} found at: {headless}")
         else:
-            # Binary not found, prompt user to provide the path
-            user_provided_path = input(f"{binary_name} not found on the PATH. Please provide the full path: ")
+            binary_name = "analyzeHeadless"
 
-            # Verify if the provided path is valid
-            if shutil.which(user_provided_path) is not None:
-                headless = user_provided_path
-                print(f"{binary_name} found at: {headless}")
+            # Check if the binary is on the PATH
+            headless = shutil.which(binary_name)
 
-                headless = user_provided_path
-            else:
-                raise Exception(f"Error: {binary_name} not found at the provided path.")
+            if headless is None:
 
-        with tempfile.TemporaryDirectory() as ghidra_project_dir:
-            # Construct Ghidra headless command
+                # Binary not found, prompt user to provide the path
+                user_provided_path = input(f"{binary_name} not found on the PATH. Please provide the full path: ")
+
+                # Verify if the provided path is valid
+                if shutil.which(user_provided_path) is not None:
+                    headless = user_provided_path
+                    print(f"{binary_name} found at: {headless}")
+
+                    headless = user_provided_path
+                else:
+                    raise Exception(f"Error: {binary_name} not found at the provided path.")
+
+        tmp_dir = None
+        if not self.ghidra_project_dir:
+            tmp_dir = tempfile.TemporaryDirectory()
+            ghidra_project_dir = tmp_dir.name
+        else:
+            ghidra_project_dir = self.ghidra_project_dir
+
+
+        if self._check_if_ghidra_project_exists(ghidra_project_dir, binary_hash):
+            #print("Processing existing project")
+            commandStr = [
+                headless,
+                ghidra_project_dir,
+                binary_hash,
+                "-process",
+                "-scriptPath",
+                temp_script_dir,
+                "-postScript",
+                temp_script_path.name
+            ]
+
+        else:
+            #print("Importing new project")
             commandStr = [
                 headless,
                 ghidra_project_dir,
@@ -271,8 +347,13 @@ save_all_functions_to_files()
                 temp_script_path.name
             ]
 
-            # Run Ghidra headless command
-            return self._execute_blocking_command(commandStr)
+        resp = self._execute_blocking_command(commandStr)
+
+        if not ghidra_project_dir:
+            ghidra_project_dir.cleanup()
+
+        # Run Ghidra headless command
+        return resp
 
     def _hash_binary(self, binary_path):
         with open(binary_path, 'rb') as f:
@@ -289,6 +370,44 @@ save_all_functions_to_files()
             
             return self._construct_ghidra_headless_command(path_to_binary, script_path, binary_hash)
 
+    def get_all_function_names_and_addresses(self, path_to_binary):
+        script_contents = self.generate_get_function_names_and_address()
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            script_path = Path(tmpdirname, "rename_script.py").resolve()
+            with open(script_path, "w") as file:
+                file.write(script_contents)
+
+            binary_hash = self._hash_binary(path_to_binary)
+            response = self._construct_ghidra_headless_command(path_to_binary, script_path, binary_hash)
+
+            # Regular expression pattern to extract function names and addresses
+            pattern = r'Function: (\w+) - Address: (0x[\da-f]+)'
+
+            # Using re.findall to extract all matches
+            matches = re.findall(pattern, str(response))
+
+            # Create a dictionary to store the results
+            functions_dict = {}
+
+            # Populate the dictionary with extracted data
+            for match in matches:
+                function_name, address = match
+                functions_dict[function_name] = address
+
+
+            return functions_dict
+
+    def refactor_function_name(self, path_to_binary, old_function_name, new_function_name):
+        script_contents = self.generate_function_rename_script(old_function_name, new_function_name)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            script_path = Path(tmpdirname, "rename_script.py").resolve()
+            with open(script_path, "w") as file:
+                file.write(script_contents)
+
+            binary_hash = self._hash_binary(path_to_binary)
+            response = self._construct_ghidra_headless_command(path_to_binary, script_path, binary_hash)
+            return response
+        
     def decompile_binaries_functions(self, path_to_binary, decom_folder):
         binary_hash = self._hash_binary(path_to_binary)
         with tempfile.TemporaryDirectory() as tmpdirname:

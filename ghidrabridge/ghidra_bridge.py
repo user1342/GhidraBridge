@@ -5,13 +5,189 @@ import subprocess
 import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-import os
 from tqdm import tqdm
 import re
 
 class GhidraBridge():
-    def __init__(self, ghidra_project_dir=None):
+    def __init__(self, ghidra_project_dir=None, cspec=None, processor=None):
         self.ghidra_project_dir = ghidra_project_dir
+        self.cspec = cspec
+        self.processor = processor
+
+    def brute_force_processor(self, binary):
+        list_of_processors = self.list_all_possible_processors()
+        valid_processors = []
+        for processor in list_of_processors:
+            bridge = GhidraBridge(processor=processor)
+            functions = bridge.get_all_function_names_and_addresses(binary)
+            if functions != {}:
+                valid_processors.append(processor)
+
+        return valid_processors
+
+    def list_all_possible_processors(self):
+        return ['6502:LE:16:default',
+        '65C02:LE:16:default',
+        '68000:BE:32:default',
+        '68000:BE:32:MC68030',
+        '68000:BE:32:MC68020',
+        '68000:BE:32:Coldfire',
+        '8048:LE:16:default',
+        '8051:BE:16:default',
+        '80251:BE:24:default',
+        '80390:BE:24:default',
+        '8051:BE:24:mx51',
+        '8085:LE:16:default',
+        'AARCH64:LE:64:v8A',
+        'AARCH64:BE:64:v8A',
+        'AARCH64:LE:32:ilp32',
+        'AARCH64:BE:32:ilp32',
+        'AARCH64:LE:64:AppleSilicon',
+        'ARM:LE:32:v8',
+        'ARM:LE:32:v8T',
+        'ARM:LEBE:32:v8LEInstruction',
+        'ARM:BE:32:v8',
+        'ARM:BE:32:v8T',
+        'ARM:LE:32:v7',
+        'ARM:LEBE:32:v7LEInstruction',
+        'ARM:BE:32:v7',
+        'ARM:LE:32:Cortex',
+        'ARM:BE:32:Cortex',
+        'ARM:LE:32:v6',
+        'ARM:BE:32:v6',
+        'ARM:LE:32:v5t',
+        'ARM:BE:32:v5t',
+        'ARM:LE:32:v5',
+        'ARM:BE:32:v5',
+        'ARM:LE:32:v4t',
+        'ARM:BE:32:v4t',
+        'ARM:LE:32:v4',
+        'ARM:BE:32:v4',
+        'avr32:BE:32:default',
+        'avr8:LE:16:default',
+        'avr8:LE:16:extended',
+        'avr8:LE:16:atmega256',
+        'avr8:LE:24:xmega',
+        'CP1600:BE:16:default',
+        'CR16C:LE:16:default',
+        'Dalvik:LE:32:default',
+        'Dalvik:LE:32:DEX_Base',
+        'Dalvik:LE:32:DEX_KitKat',
+        'Dalvik:LE:32:ODEX_KitKat',
+        'Dalvik:LE:32:DEX_Lollipop',
+        'Dalvik:LE:32:Marshmallow',
+        'Dalvik:LE:32:DEX_Nougat',
+        'Dalvik:LE:32:DEX_Oreo',
+        'Dalvik:LE:32:DEX_Pie',
+        'Dalvik:LE:32:DEX_Android10',
+        'Dalvik:LE:32:DEX_Android11',
+        'Dalvik:LE:32:DEX_Android12',
+        'Dalvik:LE:32:DEX_Android13',
+        'DATA:LE:64:default',
+        'DATA:BE:64:default',
+        'HC05:BE:16:default',
+        'HC05:BE:16:M68HC05TB',
+        'HC08:BE:16:default',
+        'HC08:BE:16:MC68HC908QY4',
+        'HCS08:BE:16:default',
+        'HCS08:BE:16:MC9S08GB60',
+        'HC-12:BE:16:default',
+        'HCS-12:BE:24:default',
+        'HCS-12X:BE:24:default',
+        'HCS12:BE:24:default',
+        'JVM:BE:32:default',
+        'M8C:BE:16:default',
+        '6809:BE:16:default',
+        'H6309:BE:16:default',
+        '6805:BE:16:default',
+        'MCS96:LE:16:default',
+        'MIPS:BE:32:default',
+        'MIPS:LE:32:default',
+        'MIPS:BE:32:R6',
+        'MIPS:LE:32:R6',
+        'MIPS:BE:64:default',
+        'MIPS:LE:64:default',
+        'MIPS:BE:64:micro',
+        'MIPS:LE:64:micro',
+        'MIPS:BE:64:R6',
+        'MIPS:LE:64:R6',
+        'MIPS:BE:64:64-32addr',
+        'MIPS:LE:64:64-32addr',
+        'MIPS:LE:64:micro64-32addr',
+        'MIPS:BE:64:micro64-32addr',
+        'MIPS:BE:64:64-32R6addr',
+        'MIPS:LE:64:64-32R6addr',
+        'MIPS:BE:32:micro',
+        'MIPS:LE:32:micro',
+        'pa-risc:BE:32:default',
+        'PIC-12:LE:16:PIC-12C5xx',
+        'PIC-16:LE:16:PIC-16',
+        'PIC-16:LE:16:PIC-16F',
+        'PIC-16:LE:16:PIC-16C5x',
+        'PIC-17:LE:16:PIC-17C7xx',
+        'PIC-18:LE:24:PIC-18',
+        'PIC-24E:LE:24:default',
+        'PIC-24F:LE:24:default',
+        'PIC-24H:LE:24:default',
+        'dsPIC30F:LE:24:default',
+        'dsPIC33F:LE:24:default',
+        'dsPIC33E:LE:24:default',
+        'dsPIC33C:LE:24:default',
+        'PowerPC:BE:32:default',
+        'PowerPC:LE:32:default',
+        'PowerPC:BE:64:default',
+        'PowerPC:BE:64:64-32addr',
+        'PowerPC:LE:64:64-32addr',
+        'PowerPC:LE:64:default',
+        'PowerPC:BE:32:4xx',
+        'PowerPC:LE:32:4xx',
+        'PowerPC:BE:32:MPC8270',
+        'PowerPC:BE:32:QUICC',
+        'PowerPC:LE:32:QUICC',
+        'PowerPC:BE:32:e500',
+        'PowerPC:LE:32:e500',
+        'PowerPC:BE:64:A2-32addr',
+        'PowerPC:LE:64:A2-32addr',
+        'PowerPC:BE:64:A2ALT-32addr',
+        'PowerPC:LE:64:A2ALT-32addr',
+        'PowerPC:BE:64:A2ALT',
+        'PowerPC:LE:64:A2ALT',
+        'PowerPC:BE:64:VLE-32addr',
+        'PowerPC:BE:64:VLEALT-32addr',
+        'RISCV:LE:64:RV64I',
+        'RISCV:LE:64:RV64IC',
+        'RISCV:LE:64:RV64G',
+        'RISCV:LE:64:RV64GC',
+        'RISCV:LE:64:default',
+        'RISCV:LE:32:RV32I',
+        'RISCV:LE:32:RV32IC',
+        'RISCV:LE:32:RV32IMC',
+        'RISCV:LE:32:RV32G',
+        'RISCV:LE:32:RV32GC',
+        'RISCV:LE:32:default',
+        'sparc:BE:32:default',
+        'sparc:BE:64:default',
+        'SuperH:BE:32:SH-2A',
+        'SuperH:BE:32:SH-2',
+        'SuperH:BE:32:SH-1',
+        'SuperH4:BE:32:default',
+        'SuperH4:LE:32:default',
+        'TI_MSP430:LE:16:default',
+        'TI_MSP430X:LE:32:default',
+        'tricore:LE:32:default',
+        'tricore:LE:32:tc29x',
+        'tricore:LE:32:tc172x',
+        'tricore:LE:32:tc176x',
+        'V850:LE:32:default',
+        'x86:LE:32:default',
+        'x86:LE:32:System Management Mode',
+        'x86:LE:16:Real Mode',
+        'x86:LE:16:Protected Mode',
+        'x86:LE:64:default',
+        'z80:LE:16:default',
+        'z8401x:LE:16:default',
+        'z180:LE:16:default',
+        'z182:LE:16:default']
 
     def _execute_blocking_command(self, command_as_list):
         if command_as_list != None:
@@ -346,6 +522,19 @@ save_all_functions_to_files()
                 "-postScript",
                 temp_script_path.name
             ]
+
+        if self.cspec != None:
+            commandStr = commandStr + [
+                "-cspec",
+                self.cspec
+            ]
+
+        if self.processor != None:
+            commandStr = commandStr + [
+                "-processor",
+                self.processor
+            ]
+
 
         resp = self._execute_blocking_command(commandStr)
 

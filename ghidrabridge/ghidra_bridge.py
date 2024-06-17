@@ -724,7 +724,6 @@ save_all_functions_to_files()
 
             
             resp = response[response.find("args")+len("args"):response.rfind("args")]
-            resp = dict(json.loads(resp))
 
             return resp
 

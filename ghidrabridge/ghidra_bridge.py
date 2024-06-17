@@ -222,7 +222,7 @@ def main():
     CONTROLLED_RETURN_OFFSET = 0
 
     # Identify function to be emulated
-    mainFunctionEntry = getSymbolAddress("<function>")
+    mainFunctionEntry = getSymbolAddress("FUN_00400dd0")
 
     # Establish emulation helper, please check out the API docs
     # for `EmulatorHelper` - there's a lot of helpful things
@@ -242,8 +242,9 @@ def main():
     # We won't use this, it's just here to show you how to query
     # valid registers for your target architecture.
     registers = getProgramRegisterList(currentProgram)
+    print("registers_start")
     print(registers)
-    
+    print("registers_end")
     # Cleanup resources and release hold on currentProgram
     emuHelper.dispose()
 

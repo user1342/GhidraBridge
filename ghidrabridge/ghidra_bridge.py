@@ -253,9 +253,9 @@ for param in params:
         type, name = param.split(" ")
         dict_of_args[name] = type
 
-print("args")
+print("args_start")
 print(dict_of_args)
-print("args")""".replace("<function>",target_function)
+print("args_end")""".replace("<function>",target_function)
         
         return script
 
@@ -723,7 +723,7 @@ save_all_functions_to_files()
                 raise Exception("Script run uncuccessfully")
 
             
-            resp = response[response.find("args")+len("args"):response.rfind("args")]
+            resp = response[response.find("args_start")+len("args_start"):response.rfind("args_end")]
 
             return resp
 

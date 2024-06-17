@@ -7,7 +7,6 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from tqdm import tqdm
 import re
-import json
 
 class GhidraBridge():
     def __init__(self, ghidra_project_dir=None, cspec=None, processor=None):
@@ -195,69 +194,6 @@ class GhidraBridge():
             #print("Executing command: {}".format(command_as_list))
             result = subprocess.run(command_as_list, capture_output=False, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             return result
-
-    def generate_script_for_getting_function_args(self, target_function):
-        script = """# SaveFunctions.py
-        
-# Import necessary Ghidra modules
-from ghidra.program.model.listing import Function
-from ghidra.util.task import TaskMonitor
-from ghidra.app.decompiler import DecompInterface
-from ghidra.program.model.symbol import RefType, SymbolType
-
-def get_function_by_name(name):
-    symbol_table = currentProgram.getSymbolTable()
-    symbols = symbol_table.getSymbols(name)
-    for symbol in symbols:
-        if symbol.getSymbolType() == SymbolType.FUNCTION:
-            return getFunctionAt(symbol.getAddress())
-    return None
-
-# Function to save the decompiled C code of a function to a file
-def save_function_c_code(function):
-    function_c_code = decompile_function_to_c_code(function)
-
-    return function_c_code
-
-# Function to decompile a function to C code
-def decompile_function_to_c_code(function):
-    decompiler = get_decompiler(function.getProgram())
-    result = decompiler.decompileFunction(function, 0, TaskMonitor.DUMMY)
-    try:
-        return result.getDecompiledFunction().getC()
-    except:
-        return ""
-
-# Function to get the decompiler for the current program
-def get_decompiler(program):
-    decompiler_options = program.getOptions("Decompiler")
-    decompiler_id = decompiler_options.getString("decompiler", "ghidra")
-    decompiler = DecompInterface()
-    decompiler.openProgram(program)
-    return decompiler
-
-# Run the main function
-decom = save_function_c_code(get_function_by_name("<function>"))
-
-decom = decom.split("\n")
-definition = decom[1]
-params = resp = definition[definition.find("(")+len("("):definition.rfind(")")]
-params = params.split(",")
-
-dict_of_args = {}
-
-for param in params:
-    if " " not in param:
-        dict_of_args[param] = param
-    else:
-        type, name = param.split(" ")
-        dict_of_args[name] = type
-
-print("args_start")
-print(dict_of_args)
-print("args_end")""".replace("<function>",target_function)
-        
-        return script
 
     def generate_script_for_getting_registers_for_function(self, target_function):
         script = """from ghidra.app.emulator import EmulatorHelper
@@ -707,25 +643,6 @@ save_all_functions_to_files()
 
 
             return functions_dict
-
-    def get_function_args(self, path_to_binary, function):
-        script_contents = self.generate_script_for_getting_function_args(function)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            script_path = Path(tmpdirname, "rename_script.py").resolve()
-            with open(script_path, "w") as file:
-                file.write(script_contents)
-
-            binary_hash = self._hash_binary(path_to_binary)
-            response = str(self._construct_ghidra_headless_command(path_to_binary, script_path, binary_hash))
-
-
-            if "args" not in response:
-                raise Exception("Script run uncuccessfully")
-
-            
-            resp = response[response.find("args_start")+len("args_start"):response.rfind("args_end")]
-
-            return resp
 
     def get_registers_for_function(self, path_to_binary, function):
         script_contents = self.generate_script_for_getting_registers_for_function(function)

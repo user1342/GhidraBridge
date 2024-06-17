@@ -665,7 +665,7 @@ save_all_functions_to_files()
 
             registers = []
             for register in resp:
-                register = register.strip("\n").strip("[").strip("]").strip("\\n").strip("'").strip().strip(" ")
+                register = register.strip("\n").strip(r"[").replace("[","").replace("]","").strip(r"]").strip("\\n").strip("'").strip().strip(" ")
                 registers.append(register)
 
 

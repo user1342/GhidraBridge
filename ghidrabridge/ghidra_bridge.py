@@ -651,7 +651,7 @@ save_all_functions_to_files()
                 file.write(script_contents)
 
             binary_hash = self._hash_binary(path_to_binary)
-            response = self._construct_ghidra_headless_command(path_to_binary, script_path, binary_hash)
+            response = str(self._construct_ghidra_headless_command(path_to_binary, script_path, binary_hash))
 
 
             if "registers" not in response:

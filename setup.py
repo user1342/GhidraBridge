@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="ghidrabridge",
-    version="0.1.4",
+    version="0.1.5",
     author="James Stevenson",
     author_email="opensource@JamesStevenson.me",
     description="A Python interface for automating Ghidra tasks.",

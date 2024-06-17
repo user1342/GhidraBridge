@@ -195,6 +195,63 @@ class GhidraBridge():
             result = subprocess.run(command_as_list, capture_output=False, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             return result
 
+    def generate_script_for_getting_registers_for_function(self, target_function):
+        script = """from ghidra.app.emulator import EmulatorHelper
+from ghidra.program.model.symbol import SymbolUtilities
+
+# Tested with Ghidra v9.1 and v9.1.1, future releases are likely to simplify
+# and/or expand the EmulatorHelper class in the API.
+
+# == Helper functions ======================================================
+def getAddress(offset):
+    return currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(offset)
+
+def getSymbolAddress(symbolName):
+    symbol = SymbolUtilities.getLabelOrFunctionSymbol(currentProgram, symbolName, None)
+    if (symbol != None):
+        return symbol.getAddress()
+    else:
+        raise("Failed to locate label: {}".format(symbolName))
+
+def getProgramRegisterList(currentProgram):
+    pc = currentProgram.getProgramContext()
+    return pc.registers
+
+# == Main function =========================================================
+def main():
+    CONTROLLED_RETURN_OFFSET = 0
+
+    # Identify function to be emulated
+    mainFunctionEntry = getSymbolAddress("<function>")
+
+    # Establish emulation helper, please check out the API docs
+    # for `EmulatorHelper` - there's a lot of helpful things
+    # to help make architecture agnostic emulator tools.
+    emuHelper = EmulatorHelper(currentProgram)
+
+    # Set controlled return location so we can identify return from emulated function
+    controlledReturnAddr = getAddress(CONTROLLED_RETURN_OFFSET)
+
+    # Set initial RIP
+    mainFunctionEntryLong = int("0x{}".format(mainFunctionEntry), 16)
+    emuHelper.writeRegister(emuHelper.getPCRegister(), mainFunctionEntryLong)
+
+    # For x86_64 `registers` contains 872 registers! You probably don't
+    # want to print all of these. Just be aware, and print what you need.
+    # To see all supported registers. just print `registers`.
+    # We won't use this, it's just here to show you how to query
+    # valid registers for your target architecture.
+    registers = getProgramRegisterList(currentProgram)
+    print(registers)
+    
+    # Cleanup resources and release hold on currentProgram
+    emuHelper.dispose()
+
+# == Invoke main ===========================================================
+main()""".replace("<function>",target_function)
+
+        return script
+
     def generate_function_rename_script(seld, old_function_name, new_function_name):
         script = """# Import the necessary Ghidra modules
 from ghidra.program.model.listing import FunctionManager
@@ -585,6 +642,33 @@ save_all_functions_to_files()
 
 
             return functions_dict
+
+    def get_registers_for_function(self, path_to_binary, function):
+        script_contents = self.generate_script_for_getting_registers_for_function(function)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            script_path = Path(tmpdirname, "rename_script.py").resolve()
+            with open(script_path, "w") as file:
+                file.write(script_contents)
+
+            binary_hash = self._hash_binary(path_to_binary)
+            response = self._construct_ghidra_headless_command(path_to_binary, script_path, binary_hash)
+
+
+            if "registers" not in response:
+                raise Exception("Script run uncuccessfully")
+
+            
+            resp = response[response.find("registers_start")+len("registers_start"):response.rfind("registers")]
+
+            resp = resp.split(",")
+
+            registers = []
+            for register in resp:
+                register = register.strip("\n").strip("[").strip("]").strip("\\n").strip("'").strip().strip(" ")
+                registers.append(register)
+
+
+            return registers
 
     def refactor_function_name(self, path_to_binary, old_function_name, new_function_name):
         script_contents = self.generate_function_rename_script(old_function_name, new_function_name)
